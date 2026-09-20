@@ -1,0 +1,593 @@
+<title>Jahin's Boarding Pass</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --room:#191714;
+    --room-lift:#221f1a;
+    --machine:#2e2b27;
+    --machine-hi:#413d37;
+    --slot:#0d0c0a;
+
+    --paper:#faf9f7;
+    --paper-2:#f3f2ef;
+    --band:#ebeae7;
+    --edge:#dcdad4;
+    --rule:#e0ded8;
+    --ink:#111110;
+    --ink-soft:#6b6b65;
+    --ink-faint:#9b9a93;
+
+    --led:#57c98a;
+    --paper-inset:28px;
+    --gut:20px;            /* the pass's own side padding */
+  }
+
+  html,body{min-height:100%}
+  body{
+    margin:0;
+    background:
+      radial-gradient(120% 70% at 50% 0%, var(--room-lift) 0%, var(--room) 62%),
+      var(--room);
+    color:var(--paper);
+    font-family:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding:0 16px;
+    display:flex;
+    justify-content:center;
+    align-items:flex-start;
+  }
+
+  .shell{
+    width:100%;
+    max-width:400px;
+    padding-block:0 40px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+
+  /* ---------- printer ---------- */
+  .machine{
+    position:relative;
+    z-index:3;
+    flex:none;
+    width:100%;
+    height:48px;
+    border-radius:0 0 12px 12px;
+    background:linear-gradient(180deg,var(--machine-hi) 0%,var(--machine) 52%,#1e1c19 100%);
+    box-shadow:0 13px 26px -10px rgba(0,0,0,.82), inset 0 -1px 0 rgba(0,0,0,.55);
+  }
+  .slot{
+    position:absolute;
+    left:50%;
+    bottom:0;
+    transform:translateX(-50%);
+    width:calc(100% - var(--paper-inset) * 2 + 10px);
+    height:9px;
+    border-radius:5px 5px 0 0;
+    background:var(--slot);
+    box-shadow:inset 0 4px 5px rgba(0,0,0,.95), 0 -1px 0 rgba(255,255,255,.07);
+  }
+  .led{
+    position:absolute;
+    left:16px; top:17px;
+    width:7px; height:7px;
+    border-radius:50%;
+    background:#3c463f;
+    box-shadow:inset 0 0 2px rgba(0,0,0,.6);
+  }
+  .settled .led{background:var(--led);box-shadow:0 0 7px rgba(87,201,138,.7)}
+  .printing .led{animation:blink .38s steps(1,end) infinite}
+  @keyframes blink{0%,49%{background:var(--led);box-shadow:0 0 7px rgba(87,201,138,.7)}50%,100%{background:#3c463f;box-shadow:none}}
+
+  .machine-label{
+    position:absolute;
+    right:16px; top:15px;
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:8px;
+    letter-spacing:.14em;
+    color:#6d665d;
+  }
+
+  /* ---------- paper feed ---------- */
+  .window{
+    position:relative;
+    flex:none;
+    width:100%;
+    margin-top:-3px;
+    overflow:hidden;
+  }
+  .window.done{overflow:visible}
+  .window::after{
+    content:"";
+    position:absolute;
+    inset:0 var(--paper-inset) auto var(--paper-inset);
+    height:26px;
+    background:linear-gradient(180deg,rgba(0,0,0,.6) 0%,rgba(0,0,0,.22) 45%,transparent 100%);
+    pointer-events:none;
+    z-index:4;
+    opacity:0;
+    transition:opacity .5s ease;
+  }
+  .printing .window::after{opacity:1}
+
+  .feed{
+    width:calc(100% - var(--paper-inset) * 2);
+    margin:0 auto;
+    transform-style:preserve-3d;
+  }
+  .feed.feeding{animation:feed 3.6s steps(34,end) both}
+  @keyframes feed{from{transform:translateY(-100%)}to{transform:translateY(0)}}
+
+  .jitter{perspective:1400px;transform-style:preserve-3d}
+  .printing .jitter{animation:jitter .11s steps(2,end) infinite}
+  @keyframes jitter{0%{transform:translateX(-.4px)}50%{transform:translateX(.5px)}100%{transform:translateX(-.4px)}}
+
+  /* ---------- the pass ---------- */
+  .flip{
+    display:grid;
+    transition:transform .92s cubic-bezier(.22,.84,.28,1);
+    transform-style:preserve-3d;
+    cursor:pointer;
+    border-radius:2px;
+  }
+  .flip.flipped{transform:rotateY(180deg)}
+  .flip:focus-visible{outline:2px solid var(--led);outline-offset:6px}
+
+  .face{
+    grid-area:1/1;
+    backface-visibility:hidden;
+    -webkit-backface-visibility:hidden;
+    background:linear-gradient(180deg,var(--paper) 0%,var(--paper) 82%,var(--paper-2) 100%);
+    color:var(--ink);
+    font-size:clamp(10.5px,3.1vw,12.5px);
+    box-shadow:0 18px 34px -16px rgba(0,0,0,.8), 0 0 0 1px var(--edge);
+    border-radius:2px;
+    display:flex;
+    flex-direction:column;
+  }
+  .back{transform:rotateY(180deg)}
+
+  .pad{padding-inline:var(--gut)}
+
+  /* shared micro-label */
+  .lbl{
+    display:block;
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:.72em;
+    font-weight:500;
+    letter-spacing:.16em;
+    color:var(--ink-soft);
+  }
+
+  /* header */
+  .head{padding-top:16px;display:flex;flex-direction:column;gap:9px}
+  .airline-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+  .airline{
+    font-size:1.28em;
+    font-weight:700;
+    letter-spacing:-.005em;
+    line-height:1;
+  }
+  .flightmeta{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:.76em;
+    letter-spacing:.1em;
+    color:var(--ink-soft);
+    white-space:nowrap;
+  }
+  .rule-thick{height:2px;background:var(--ink);margin-top:11px}
+
+  /* route */
+  .route{padding-top:15px;display:flex;flex-direction:column;gap:7px}
+  .fromto{display:flex;justify-content:space-between}
+  .ports{
+    display:grid;
+    grid-template-columns:auto 1fr auto;
+    align-items:center;
+    gap:10px;
+  }
+  .code{
+    font-size:3.25em;
+    font-weight:700;
+    line-height:.86;
+    letter-spacing:-.025em;
+  }
+  .mid{display:flex;flex-direction:column;align-items:center;gap:4px}
+  .mid i{display:block;width:100%;height:1px;background:var(--rule)}
+  .mid span{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:.7em;
+    letter-spacing:.11em;
+    color:var(--ink-soft);
+    white-space:nowrap;
+  }
+  .cities{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    font-size:1.04em;
+    font-weight:500;
+    padding-top:3px;
+  }
+  .cities span:last-child{text-align:right}
+  .terms{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:.72em;
+    letter-spacing:.05em;
+    color:var(--ink-faint);
+  }
+  .terms span:last-child{text-align:right}
+
+  /* gate band — full bleed */
+  .band{
+    margin-top:17px;
+    background:var(--band);
+    padding:13px var(--gut) 14px;
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:6px;
+  }
+  .bcell{display:flex;flex-direction:column;gap:5px;min-width:0}
+  .bv{
+    font-size:1.55em;
+    font-weight:700;
+    letter-spacing:-.01em;
+    line-height:1;
+    font-variant-numeric:tabular-nums;
+  }
+
+  /* passenger */
+  .pax{padding-top:17px;display:flex;flex-direction:column;gap:7px}
+  .paxrow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .paxname{
+    font-size:1.32em;
+    font-weight:700;
+    letter-spacing:-.005em;
+  }
+  /* detail rows */
+  .rows{padding-top:15px;display:flex;flex-direction:column}
+  .row{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:12px;
+    padding:9px 0;
+    border-top:1px solid var(--rule);
+    font-size:.98em;
+  }
+  .row:first-child{border-top:0}
+  .row span{color:var(--ink-soft);white-space:nowrap}
+  .row b{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-weight:500;
+    letter-spacing:.04em;
+    text-align:right;
+    color:var(--ink);
+  }
+
+  /* tear-off */
+  .perf{
+    position:relative;
+    height:26px;
+    margin-top:14px;
+    display:flex;
+    align-items:center;
+  }
+  .perf::before,.perf::after{
+    content:"";
+    position:absolute;
+    width:15px;height:15px;
+    border-radius:50%;
+    background:var(--room);
+    box-shadow:inset 0 1px 2px rgba(0,0,0,.5);
+  }
+  .perf::before{left:-8px}
+  .perf::after{right:-8px}
+  .perf i{flex:1;border-top:1px dashed var(--edge);margin:0 11px}
+
+  /* stub */
+  .stub{padding-bottom:15px;display:flex;flex-direction:column;gap:9px}
+  .bcbp{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:.54em;
+    letter-spacing:.04em;
+    color:var(--ink-faint);
+    white-space:nowrap;
+    overflow:hidden;
+  }
+  .bars{display:flex;align-items:flex-end;gap:1px;height:62px}
+  .bars i{background:var(--ink);height:100%;display:block;flex:var(--w) 0 0;min-width:0}
+  .stubfoot{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:.68em;
+    letter-spacing:.09em;
+    color:var(--ink-faint);
+  }
+
+  /* ---------- back ---------- */
+  .back .body{
+    padding:22px var(--gut) 16px;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+    gap:20px;
+    flex:1;
+  }
+  .bgroup{display:flex;flex-direction:column;gap:12px}
+  .gifted{gap:15px}
+  .rule-solid{height:1px;background:var(--rule)}
+  .greet{
+    font-size:2.6em;
+    line-height:1.06;
+    font-weight:700;
+    letter-spacing:-.032em;
+    margin:0;
+  }
+  .msg{
+    font-size:1.25em;
+    line-height:1.45;
+    font-weight:400;
+    color:var(--ink);
+    margin:0;
+    max-width:30ch;
+  }
+  .names{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:17px 10px;
+    padding-top:3px;
+  }
+  .names span{
+    opacity:0;
+    transform:translateY(5px);
+    transition:opacity .42s ease,transform .42s ease;
+    transition-delay:calc(var(--i) * 85ms + 360ms);
+    font-size:1.28em;
+    font-weight:400;
+    letter-spacing:-.012em;
+  }
+  .flipped .names span{opacity:1;transform:none}
+  .backfoot{display:flex;flex-direction:column;gap:10px}
+  .fine{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:.68em;
+    letter-spacing:.1em;
+    color:var(--ink-faint);
+    line-height:1.6;
+  }
+
+  /* ---------- hint + control ---------- */
+  .hint{
+    margin-top:18px;
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:10px;
+    letter-spacing:.2em;
+    color:#8d8478;
+    opacity:0;
+    transition:opacity .6s ease;
+    height:13px;
+  }
+  .hint.show{opacity:1;animation:pulse 2.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
+
+  .again{
+    margin-top:14px;
+    background:none;
+    border:1px solid #3a352e;
+    color:#8d8478;
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:10px;
+    letter-spacing:.18em;
+    padding:9px 15px;
+    border-radius:2px;
+    cursor:pointer;
+    opacity:0;
+    transition:opacity .6s ease,color .2s ease,border-color .2s ease;
+  }
+  .settled .again{opacity:1}
+  .again:hover{color:var(--paper);border-color:#5c554b}
+  .again:focus-visible{outline:2px solid var(--led);outline-offset:3px}
+
+  @media (prefers-reduced-motion:reduce){
+    .feed.feeding{animation:none;transform:none}
+    .printing .jitter{animation:none}
+    .printing .led{animation:none;background:var(--led)}
+    .flip{transition-duration:.001s}
+    .names span{transition-delay:0s !important}
+    .hint.show{animation:none;opacity:1}
+  }
+</style>
+
+<div class="shell" id="stage">
+  <div class="machine">
+    <div class="led" id="led"></div>
+    <div class="machine-label">BG-TKT 01</div>
+    <div class="slot"></div>
+  </div>
+
+  <div class="window" id="window">
+    <div class="feed" id="feed">
+      <div class="jitter">
+        <div class="flip" id="flip" role="button" tabindex="0" aria-pressed="false"
+             aria-label="Boarding pass for Jahin Ahmed. Activate to read the message on the back.">
+
+          <!-- FRONT -->
+          <div class="face front">
+            <div class="pad head">
+              <span class="lbl">BOARDING PASS</span>
+              <div class="airline-row">
+                <span class="airline">BANGLADESH AIRLINES</span>
+                <span class="flightmeta">BG 030 &middot; SOON</span>
+              </div>
+              <div class="rule-thick"></div>
+            </div>
+
+            <div class="pad route">
+              <div class="fromto"><span class="lbl">FROM</span><span class="lbl">TO</span></div>
+              <div class="ports">
+                <span class="code">ATL</span>
+                <span class="mid"><span>8H 30M</span><i></i><span>NON-STOP</span></span>
+                <span class="code">LHR</span>
+              </div>
+              <div class="cities"><span>Atlanta</span><span>London Heathrow</span></div>
+              <div class="terms">
+                <span>Terminal F &middot; Intl</span>
+                <span>Terminal 3 &middot; Next morning</span>
+              </div>
+            </div>
+
+            <div class="band">
+              <div class="bcell"><span class="lbl">GATE</span><span class="bv">SOON</span></div>
+              <div class="bcell"><span class="lbl">BOARDS</span><span class="bv">SOON</span></div>
+              <div class="bcell"><span class="lbl">SEAT</span><span class="bv">30A</span></div>
+              <div class="bcell"><span class="lbl">ZONE</span><span class="bv">1</span></div>
+            </div>
+
+            <div class="pad pax">
+              <span class="lbl">PASSENGER</span>
+              <div class="paxrow">
+                <span class="paxname">AHMED / JAHIN MR</span>
+              </div>
+            </div>
+
+            <div class="pad rows">
+              <div class="row"><span>Booking reference</span><b>JJ30LDN</b></div>
+              <div class="row"><span>Check-in</span><b>SORTED</b></div>
+              <div class="row"><span>Baggage</span><b>GIFTS ONLY</b></div>
+              <div class="row"><span>Distance</span><b>4,198 MI &middot; DO NOT RUN IT</b></div>
+              <div class="row"><span>Valid from</span><b>21 SEP 2026</b></div>
+            </div>
+
+            <div class="perf"><i></i></div>
+
+            <div class="pad stub">
+              <div class="bcbp">M1AHMED/JAHIN MR EJJ30LDN ATLLHRBG 0030 287Y030A0007</div>
+              <div class="bars" id="bars" aria-hidden="true"></div>
+              <div class="stubfoot"><span>JJ30LDN &middot; SEQ 0030</span><span>ISSUED WITH LOVE</span></div>
+            </div>
+          </div>
+
+          <!-- BACK -->
+          <div class="face back">
+            <div class="pad head">
+              <span class="lbl">ADDITIONAL INFORMATION</span>
+              <div class="airline-row">
+                <span class="airline">PERSONAL MESSAGE</span>
+                <span class="flightmeta">BG 030 &middot; SOON</span>
+              </div>
+              <div class="rule-thick"></div>
+            </div>
+
+            <div class="body">
+              <div class="bgroup">
+                <h1 class="greet">Happy 30th birthday, Jahin!</h1>
+                <p class="msg">See you in London soon.</p>
+              </div>
+
+              <div class="bgroup gifted">
+                <div class="rule-solid"></div>
+                <span class="lbl">GIFTED FROM</span>
+                <div class="names" id="names"></div>
+              </div>
+
+              <div class="backfoot">
+                <div class="fine">
+                  ON ARRIVAL: TEA, PROPER<br>
+                  NO RUNNING IN THE TERMINAL<br>
+                  VALID UNTIL WE SEE YOU &middot; ATL &rarr; LHR
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hint" id="hint">TAP THE TICKET</div>
+  <button class="again" id="again" type="button">PRINT AGAIN</button>
+</div>
+
+<script>
+  var stage  = document.getElementById('stage');
+  var feed   = document.getElementById('feed');
+  var win    = document.getElementById('window');
+  var card   = document.getElementById('flip');
+  var hint   = document.getElementById('hint');
+  var again  = document.getElementById('again');
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  /* deterministic barcode */
+  (function () {
+    var host = document.getElementById('bars'), seed = 300195, html = '';
+    for (var i = 0; i < 78; i++) {
+      seed = (seed * 16807) % 2147483647;          /* Lehmer: stays inside 2^53 */
+      var w = 1 + (seed % 4);
+      html += '<i style="--w:' + w + '"></i>';
+    }
+    host.innerHTML = html;
+  })();
+
+  /* contributors */
+  (function () {
+    var people = ['Liên', 'Tom', 'Charan', 'Ben', 'Jonas', 'Talia', 'Noom', 'David', 'Weronika'];
+    document.getElementById('names').innerHTML = people
+      .map(function (n, i) { return '<span style="--i:' + i + '">' + n + '</span>'; })
+      .join('');
+  })();
+
+  var flipped = false;
+
+  function setFlip(next) {
+    flipped = next;
+    card.classList.toggle('flipped', flipped);
+    card.setAttribute('aria-pressed', String(flipped));
+    if (flipped) hint.classList.remove('show');
+  }
+
+  function settle() {
+    feed.classList.remove('feeding');
+    stage.classList.remove('printing');
+    stage.classList.add('settled');
+    win.classList.add('done');
+    hint.classList.add('show');
+  }
+
+  function print() {
+    setFlip(false);
+    stage.classList.remove('settled');
+    win.classList.remove('done');
+    hint.classList.remove('show');
+
+    if (reduce.matches) { settle(); return; }
+
+    feed.classList.remove('feeding');
+    void feed.offsetWidth;          /* restart the feed animation */
+    feed.classList.add('feeding');
+    stage.classList.add('printing');
+  }
+
+  feed.addEventListener('animationend', function (e) {
+    if (e.animationName === 'feed') settle();
+  });
+
+  card.addEventListener('click', function () { setFlip(!flipped); });
+  card.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+      e.preventDefault();
+      setFlip(!flipped);
+    }
+  });
+  again.addEventListener('click', print);
+
+  setTimeout(print, 420);
+</script>
